@@ -1,60 +1,34 @@
 # OrbitMesh Support Assistant Design Note
 
-## 1. Overall Architecture and Key Trade-offs
+## 1. Architecture and Key Trade-offs
 
-This is a command-line RAG support assistant for the OrbitMesh product documents. It has four layers:
+Four layers: **ingestion** (loads corpus, extracts metadata, chunks, embeds, stores in Chroma), **retrieval** (filters by product line/status, then ranks by similarity), **conversation agent** (LangGraph: screens input, fills diagnostic slots, retrieves evidence, generates a cited answer, applies guardrails, persists session), and **CLI** (interactive terminal + JSONL adapter).
 
-1. **Ingestion:** loads the Markdown corpus, extracts document metadata, chunks sections, creates embeddings, and stores the chunks in Chroma.
-2. **Retrieval:** builds a query from the conversation state, filters by product line and document status, then ranks the remaining chunks by semantic similarity.
-3. **Conversation agent:** a LangGraph workflow screens the message, fills diagnostic slots, asks for missing information, retrieves evidence, generates a cited answer, applies output guardrails, and saves the session.
-4. **CLI:** provides both the interactive terminal experience and the JSONL adapter used by contract checks and Promptfoo.
+Key trade-off: the LLM handles triage and wording, but never product facts directly — retrieval filters and deterministic guardrails control what evidence and actions are allowed. This sacrifices some flexibility for grounding and safety.
 
-The central trade-off is between flexibility and control. A general-purpose LLM can ask natural follow-up questions and explain documentation well, but it can also guess or combine similar-looking instructions. I therefore keep the LLM responsible for triage and wording, while retrieval filters and deterministic guardrails control what evidence and actions are allowed.
+Second trade-off: local simplicity (Chroma + JSON session files) vs. production scale. Easy to run and inspect locally; would need managed services and shared storage for multiple production instances.
 
-Another trade-off is local simplicity versus production scale. Chroma and JSON session files make the project easy to run and inspect locally. They would need to become managed services and shared storage for multiple production instances.
-
-![OrbitMesh architecture and data flow](architecture.png)
-
+<img src="architecture.png" alt="OrbitMesh architecture and data flow" width="620" />
 
 ## 2. Chunking and Embedding Choices
 
-Documents are split according to their Markdown structure rather than by an arbitrary character count. `##` headings create sections and `###` headings create subsections. For example, `Wireless N1` and `Ethernet-connected N1` become separate chunks. The parent heading is included in each chunk so the embedded text retains its context.
+Documents split at Markdown heading boundaries (`##`/`###`) rather than by character count — e.g. `Wireless N1` and `Ethernet-connected N1` become separate chunks, each retaining its parent heading for context. This matches the corpus's existing structure and avoids mixing incompatible instructions in one embedding; a long section might still need a secondary length-based split at larger scale.
 
-This choice fits the corpus because troubleshooting procedures are already organized into meaningful sections. It also avoids combining incompatible instructions into one embedding. A downside is that a very long section could still need a second, length-based split in a larger corpus.
+Each chunk carries metadata: document ID/section, product line (`home`/`pro`/`all`), current/archive status, version, effective date.
 
-Each chunk stores metadata derived from the source document:
-
-- document ID and section;
-- product line (`home`, `pro`, or `all`);
-- current/archive status;
-- document version and effective date.
-
-Embeddings use OpenRouter's `openai/text-embedding-3-small`. The chat model is `openai/gpt-5-mini`. Using separate models keeps semantic search independent from answer generation. The embedding model finds relevant passages; the chat model interprets the retrieved evidence and maintains the conversation.
-
-The main retrieval trade-off is that metadata filtering happens before similarity ranking. This reduces generic-similarity mistakes, such as returning the home LED reference for a Pro N5 Pro question, but requires the agent to identify the product line before giving specific advice.
+Embeddings: OpenRouter `openai/text-embedding-3-small`. Chat: `openai/gpt-5-mini`. Separating the two keeps semantic search independent from answer generation. Retrieval filters metadata **before** ranking by similarity — this avoids generic-similarity mistakes (e.g. returning the home LED reference for a Pro N5 Pro question) but requires the agent to establish product line first.
 
 ## 3. Conversation and Safety Design
 
-Each turn runs through LangGraph. The planner tracks product line, device, symptom, connection method, LED state, error code, and attempted steps. If important context is missing, the graph asks one focused question instead of guessing.
+The LangGraph planner tracks product line, device, symptom, connection method, LED state, error code, and attempted steps, asking one focused question when context is missing. The answer node receives only relevant evidence and must return an action, citations, and one safe next step. Sessions persist under `data/sessions/`, so a reused JSONL `session_id` continues the conversation.
 
-After retrieval, the answer node receives only the relevant evidence and must return an action, citations, and one safe next step. Sessions are persisted under `data/sessions/`, allowing a reused JSONL `session_id` to continue a conversation.
-
-Guardrails operate before and after the LLM. Input checks detect prompt-injection language and redact likely passwords, API keys, and other sensitive values. Output checks block internal repair instructions, require confirmation before a factory reset, add warranty disclaimers, and force escalation for safety conditions such as smoke, burning smell, overheating, or visible damage.
+Guardrails run before and after the LLM: input checks catch prompt-injection language and redact secrets; output checks block internal-repair instructions, require confirmation before a factory reset, add warranty disclaimers, and force escalation for safety conditions (smoke, burning smell, overheating, visible damage).
 
 ## 4. Evaluation Method and Results
 
-The application is evaluated through its real JSONL interface, not by calling internal functions directly. Promptfoo invokes `scripts/chat.sh --jsonl` through `promptfoo/provider.js`, preserving one `session_id` across multi-turn cases.
+Evaluated through the real JSONL interface (not internal function calls) — Promptfoo drives `scripts/chat.sh --jsonl` via `promptfoo/provider.js`, preserving `session_id` across multi-turn cases. `make test` runs the smoke suite; `make eval` runs the full suite covering Home vs. Pro retrieval/citations, diagnostic memory, factory-reset confirmation, safety escalation, prompt injection, and resolution recognition.
 
-`make test` runs the smoke suite, and `make eval` runs the full suite. The cases cover:
-
-- Home versus Pro retrieval and citations;
-- multi-turn diagnostic memory;
-- factory-reset confirmation;
-- safety escalation;
-- prompt-injection handling;
-- resolution recognition.
-
-The observed live results were:
+Observed live results:
 
 ```text
 make test: 2/2 passed
@@ -62,33 +36,27 @@ make eval: 6/6 passed
 contract checker: 20/20 checks passed
 ```
 
-The assertions measure observable behavior: allowed actions, expected document IDs in citations, forbidden wrong-product citations, safety escalation, no unsafe repair advice, and resolution recognition. They do not attempt to prove that every sentence is factually perfect.
+Assertions check observable behavior — allowed actions, expected/forbidden citations, safety escalation, no unsafe advice — not that every sentence is factually perfect.
 
-For GitHub Actions, `ORBITMESH_CI_MODE=1` switches to local Chroma embeddings and a deterministic LLM response path. The workflow uses temporary directories and runs ingestion, retrieval, idempotency, contract, and Promptfoo checks without an API key. This validates the application wiring and retrieval behavior; live OpenRouter runs are still needed to measure real model quality.
+GitHub Actions uses `ORBITMESH_CI_MODE=1` (local Chroma embeddings + deterministic LLM responses) to run ingestion, retrieval, idempotency, contract, and Promptfoo checks with no API key — validating wiring, not live model quality.
 
 ## 5. Observed Failure and Fix
 
-The most relevant failure occurred in the agent logic. In an early version, the planner could correctly mark a customer message as a safety signal, but the graph still allowed the answer model to choose the final action. That meant a model could theoretically return an ordinary troubleshooting instruction after the customer reported overheating or a burning smell.
+Early on, the planner could correctly flag a safety signal, but the graph still let the answer model choose the final action — so a burning-smell report could theoretically get an ordinary troubleshooting step instead of escalation. An offline evaluation case exposed this. Fix: `node_guard_output` now forces `action="escalate"` whenever the planner reports a safety signal, appending a stop-and-contact-support message. The LLM still handles language/evidence; it can no longer override a safety stop condition.
 
-An offline evaluation case exposed this gap. I fixed it in `node_guard_output` by forcing `action="escalate"` whenever the planner reports a safety signal, then appending a stop-troubleshooting/support message. The LLM still handles language and evidence selection, but it can no longer override a documented safety stop condition.
+## 6. Scaling to 100x Corpus and Real Load
 
-## 6. Scaling to 100x Corpus Size and Real Customer Load
+Ingestion should become a versioned batch job: batched/cached embeddings, incremental updates, atomic index publishing. A managed vector database replaces the single local Chroma directory for concurrent access. Retrieval needs stronger deduplication, reranking, and conflict resolution as overlapping/contradictory procedures become more likely.
 
-At roughly 100 times the current corpus size, ingestion should become a versioned batch job. It should batch and cache embeddings, process only changed documents, maintain separate index versions, and publish a new index atomically. A managed vector database would be preferable to one local Chroma directory when several application instances need concurrent access.
-
-Retrieval would need stronger deduplication, reranking, and conflict resolution because a larger corpus increases the chance of overlapping or contradictory procedures. Product, version, region, and effective-date metadata would become essential.
-
-For real customer traffic, I would move sessions from JSON files to shared storage, add connection pooling, retrieval and response caches, timeouts, rate limits, structured tracing, and monitoring. The planner adds an extra model call per turn, so a smaller classifier or deterministic slot extraction could reduce latency and cost. The larger model could then be reserved for grounded answer generation.
+For real traffic: move sessions to shared storage, add connection pooling, retrieval/response caches, timeouts, rate limits, tracing, and monitoring. Since the planner adds a model call every turn, a smaller/deterministic classifier could replace it, reserving the larger model for grounded answers.
 
 ## 7. How the Evaluation Could Be Misleading
 
-The evaluation set is small and hand-written. It could pass while missing a difficult private conversation that combines an ambiguous product, an archived firmware workaround, incomplete LED information, and a safety concern. The assertions also check selected citations and phrases rather than every factual claim. For that reason, the results are useful evidence of regression resistance, but not a guarantee of complete support quality.
+The suite is small and hand-written — it could pass while missing a private conversation combining an ambiguous product, an archived-firmware workaround, incomplete LED info, and a safety concern. Assertions check selected citations/phrases, not every claim, so results indicate regression resistance, not complete support-quality guarantees.
 
 ## 8. AI Tools Used and Human Review
 
-I used GitHub Copilot in VS Code as an implementation and design assistant. It helped explore the repository, compare ingestion and conversation structures, draft Python and LangGraph components, and investigate Promptfoo and OpenRouter integration issues.
+GitHub Copilot (VS Code) assisted with exploring the repo, comparing structures, drafting Python/LangGraph code, and debugging Promptfoo/OpenRouter integration. The work stayed human-in-the-loop: I chose the architecture, reviewed suggestions, checked behavior/safety rules against the actual corpus, ran commands, and decided which fixes to keep. Promptfoo was the black-box eval tool; OpenRouter supplied embedding/chat APIs. Copilot accelerated exploration and coding — final design decisions and validation were mine.
 
-The work remained human-in-the-loop. I chose the architecture, reviewed the generated suggestions, checked product behavior and safety rules against the supplied corpus, ran the commands, inspected failures, and decided which fixes to keep. Promptfoo was used as the black-box evaluation tool, and OpenRouter provided the embedding and chat APIs. Copilot accelerated exploration and coding, but the final design decisions, validation, and interpretation of results remained mine.
-
-![OrbitMesh LangGraph conversation flow](langgraph-flow.png)
+<img src="langgraph-flow.png" alt="OrbitMesh LangGraph conversation flow" width="620" />
 

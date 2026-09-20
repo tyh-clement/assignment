@@ -29,9 +29,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ORBITMESH_CI_MODE: "1"
-      ORBITMESH_DATA_DIR: ${{ runner.temp }}/orbitmesh-data
-      CHROMA_DIR: ${{ runner.temp }}/orbitmesh-data/chroma
-      INGEST_STATE_PATH: ${{ runner.temp }}/orbitmesh-data/ingest_state.json
       CHROMA_COLLECTION: orbitmesh_ci
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +41,12 @@ jobs:
         with:
           node-version: "20"
           cache: npm
+
+      - name: Configure ephemeral CI storage
+        run: |
+          echo "ORBITMESH_DATA_DIR=$RUNNER_TEMP/orbitmesh-data" >> "$GITHUB_ENV"
+          echo "CHROMA_DIR=$RUNNER_TEMP/orbitmesh-data/chroma" >> "$GITHUB_ENV"
+          echo "INGEST_STATE_PATH=$RUNNER_TEMP/orbitmesh-data/ingest_state.json" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: |

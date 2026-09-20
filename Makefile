@@ -17,7 +17,7 @@ chat:
 
 test:
 	$(PYTHON) scripts/check_contract.py
-	npx promptfoo eval -c promptfoo/smoke.yaml --no-cache
+	cd promptfoo && ../node_modules/.bin/promptfoo eval -c smoke.yaml --no-cache
 
 eval:
-	npx promptfoo eval -c promptfoo/full.yaml --no-cache
+	cd promptfoo && ../node_modules/.bin/promptfoo eval -c full.yaml --no-cache

@@ -49,22 +49,16 @@ jobs:
           echo "INGEST_STATE_PATH=$RUNNER_TEMP/orbitmesh-data/ingest_state.json" >> "$GITHUB_ENV"
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          npm ci
+        run: make setup
 
       - name: Build knowledge base with local embeddings
-        run: python -m orbitmesh.ingestion.ingest --force
+        run: make ingest
 
       - name: Run retrieval and idempotency checks
-        run: python scripts/ci_retrieval_check.py
+        run: .venv/bin/python scripts/ci_retrieval_check.py
 
-      - name: Check JSONL transport contract
-        run: python scripts/check_contract.py
-
-      - name: Run Promptfoo smoke evaluation
-        run: npx promptfoo eval -c promptfoo/smoke.yaml --no-cache
+      - name: Run contract and smoke checks
+        run: make test
 
       - name: Run Promptfoo full evaluation
-        run: npx promptfoo eval -c promptfoo/full.yaml --no-cache
+        run: make eval

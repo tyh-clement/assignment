@@ -1,4 +1,4 @@
-name: OrbitMesh Corpus CI
+name: OrbitMesh Retrieval Pipeline CI
 
 on:
   push:
@@ -25,19 +25,19 @@ on:
       - ".github/workflows/corpus-ci.yml"
 
 jobs:
-  corpus-and-cli:
+  retrieval-and-chat:
     runs-on: ubuntu-latest
     env:
       ORBITMESH_CI_MODE: "1"
       CHROMA_COLLECTION: orbitmesh_ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12.11"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24.19.0"
           cache: npm
@@ -54,7 +54,7 @@ jobs:
           pip install -e .
           npm ci
 
-      - name: Ingest corpus with local embeddings
+      - name: Build knowledge base with local embeddings
         run: python -m orbitmesh.ingestion.ingest --force
 
       - name: Run retrieval and idempotency checks

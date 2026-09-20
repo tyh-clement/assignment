@@ -25,7 +25,7 @@
                 <mxCell id="sessions" value="Session state&#xa;data/sessions/*.json" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" parent="lane2" vertex="1">
                     <mxGeometry x="240" y="225" width="210" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="corpus" value="Corpus&#xa;Markdown + manifest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" parent="1" vertex="1">
+                <mxCell id="corpus" value="Knowledge base&#xa;Markdown + manifest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="170" y="165" width="180" height="70" as="geometry"/>
                 </mxCell>
                 <mxCell id="ingest" value="Ingestion&#xa;metadata + section chunks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
@@ -34,7 +34,7 @@
                 <mxCell id="chroma" value="Chroma&#xa;vector + metadata store" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" parent="1" vertex="1">
                     <mxGeometry x="1060" y="165" width="210" height="70" as="geometry"/>
                 </mxCell>
-                <mxCell id="cli" value="CLI / JSONL&#xa;scripts/chat.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+                <mxCell id="cli" value="Support interface&#xa;terminal + JSONL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
                     <mxGeometry x="120" y="465" width="180" height="70" as="geometry"/>
                 </mxCell>
                 <mxCell id="agent" value="LangGraph agent&#xa;plan + guardrails + state" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" parent="1" vertex="1">

@@ -1,0 +1,4 @@
+chromadb>=0.5.20
+python-dotenv>=1.0
+langgraph>=0.2
+openai>=1.40

@@ -1,0 +1,7 @@
+{
+  "name": "orbitmesh-evaluation",
+  "private": true,
+  "devDependencies": {
+    "promptfoo": "^0.119.0"
+  }
+}

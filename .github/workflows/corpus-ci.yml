@@ -1,0 +1,67 @@
+name: OrbitMesh Corpus CI
+
+on:
+  push:
+    paths:
+      - "corpus/**"
+      - "src/orbitmesh/ingestion/**"
+      - "src/orbitmesh/agent/**"
+      - "promptfoo/**"
+      - "scripts/**"
+      - "Makefile"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/corpus-ci.yml"
+  pull_request:
+    paths:
+      - "corpus/**"
+      - "src/orbitmesh/ingestion/**"
+      - "src/orbitmesh/agent/**"
+      - "promptfoo/**"
+      - "scripts/**"
+      - "Makefile"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/corpus-ci.yml"
+
+jobs:
+  corpus-and-cli:
+    runs-on: ubuntu-latest
+    env:
+      ORBITMESH_CI_MODE: "1"
+      ORBITMESH_DATA_DIR: ${{ runner.temp }}/orbitmesh-data
+      CHROMA_DIR: ${{ runner.temp }}/orbitmesh-data/chroma
+      INGEST_STATE_PATH: ${{ runner.temp }}/orbitmesh-data/ingest_state.json
+      CHROMA_COLLECTION: orbitmesh_ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          npm ci
+
+      - name: Ingest corpus with local embeddings
+        run: python -m orbitmesh.ingestion.ingest --force
+
+      - name: Run retrieval and idempotency checks
+        run: python scripts/ci_retrieval_check.py
+
+      - name: Check JSONL transport contract
+        run: python scripts/check_contract.py
+
+      - name: Run Promptfoo smoke evaluation
+        run: npx promptfoo eval -c promptfoo/smoke.yaml --no-cache
+
+      - name: Run Promptfoo full evaluation
+        run: npx promptfoo eval -c promptfoo/full.yaml --no-cache

@@ -5,8 +5,8 @@ Series systems. Product guidance comes from the documents in `corpus/`.
 
 ## Requirements
 
-- Python 3.10+
-- Node.js 18+ and npm
+- Python 3.12.11
+- Node.js 24.19.0 and npm
 - An OpenRouter API key
 
 ## Setup
